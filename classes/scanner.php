@@ -38,9 +38,9 @@ defined('MOODLE_INTERNAL') || die();
 class scanner extends \core\antivirus\scanner {
 
     /**
-     * @var array A semicolon separated string of allowed or denied mimetypes.
+     * @var array Configured mimetypes to allow or deny.
      */
-    public $configuredmimetypes;
+    protected $configuredmimetypes;
 
     /**
      * @var string The active scan mode ('allow' or 'deny'), set during scan_file().
@@ -159,11 +159,10 @@ class scanner extends \core\antivirus\scanner {
     }
 
     /**
-     *
      * To identify extension of the MIME type.
      *
-     * @param string MIME type
-     * @return array MIME type extention
+     * @param string $mime MIME type.
+     * @return array MIME type extensions.
      */
     public static function extension_filter($mime) {
         $types = \core_filetypes::get_types();
@@ -178,7 +177,7 @@ class scanner extends \core\antivirus\scanner {
     }
 
     /**
-     * To get comma separate extension on the basis of allowed or denxed MIME types configure by administrator.
+     * To get comma separated extensions on the basis of allowed or denied MIME types configured by administrator.
      *
      * @return string types of allowed extensions based on allowed MIME types.
      */

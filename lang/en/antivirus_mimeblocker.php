@@ -37,5 +37,5 @@ $string['scanmodedesc'] = 'Choose between two modi. Allow-Mode: all Mimetypes li
 $string['scanmodeallow'] = 'Allow-Mode';
 $string['scanmodedeny'] = 'Deny-Mode';
 $string['unknownerror'] = 'There was an unknown error with Mime Blocker.';
-$string['virusfoundallow'] = ' You can only upload one of the following file types : {$a->types}.';
-$string['virusfounddeny'] = ' You can not upload one of the following file types : {$a->types}.';
+$string['virusfoundallow'] = 'You can only upload one of the following file types: {$a->types}.';
+$string['virusfounddeny'] = 'You cannot upload one of the following file types: {$a->types}.';
