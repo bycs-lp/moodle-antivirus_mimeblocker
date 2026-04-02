@@ -88,19 +88,15 @@ class scanner extends \core\antivirus\scanner {
         } else if ($scanmodeconfig == "deny") {
             $scanmode = [false, true]; // Switch scanmode.
         } else {
+            // Invalid scanmode config, fail safe and block all uploads.
             return self::SCAN_RESULT_FOUND;
         }
 
-        $detectedmimetype = null;
-        // Check mimetype using php functions.
-        if (function_exists('finfo_file')) {
-            $finfo = finfo_open(FILEINFO_MIME_TYPE);
-            $detectedmimetype = finfo_file($finfo, $file);
-            finfo_close($finfo);
-        } else if (function_exists('mime_content_type')) {
-            // Deprecated, only when finfo isn't available.
-            debugging("Note finfo_file() php function not available, falling back to depracated mime_content_type()");
-            $detectedmimetype = mime_content_type($file);
+        $detectedmimetype = $this->detect_mimetype($file);
+
+        if ($detectedmimetype === null) {
+            debugging("Could not detect MIME type for file ($file). No detection function available.");
+            return self::SCAN_RESULT_ERROR;
         }
 
         // MoodleNet compatibility, Ignore course backup file.
@@ -129,6 +125,26 @@ class scanner extends \core\antivirus\scanner {
         }
 
         return $return;
+    }
+
+    /**
+     * Detect the MIME type of a file.
+     *
+     * @param string $file Full path to the file.
+     * @return string|null The detected MIME type, or null if detection is not available.
+     */
+    protected function detect_mimetype($file) {
+        if (function_exists('finfo_file')) {
+            $finfo = finfo_open(FILEINFO_MIME_TYPE);
+            $mimetype = finfo_file($finfo, $file);
+            finfo_close($finfo);
+            return $mimetype ?: null;
+        } else if (function_exists('mime_content_type')) {
+            debugging("Note finfo_file() php function not available, falling back to deprecated mime_content_type()");
+            $mimetype = mime_content_type($file);
+            return $mimetype ?: null;
+        }
+        return null;
     }
 
     /**
