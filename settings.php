@@ -34,7 +34,7 @@ if ($ADMIN->fulltree) {
     $settings->add(new admin_setting_configselect('antivirus_mimeblocker/scanmode',
     new lang_string('scanmode', 'antivirus_mimeblocker'),
     new lang_string('scanmodedesc', 'antivirus_mimeblocker'),
-    '0',
+    'deny',
     [
         'allow' => new lang_string('scanmodeallow', 'antivirus_mimeblocker'),
         'deny' => new lang_string('scanmodedeny', 'antivirus_mimeblocker')
