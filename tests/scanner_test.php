@@ -110,9 +110,8 @@ final class scanner_test extends \advanced_testcase {
      */
     public function test_scan_file_allow_mode_blocked_type(): void {
         $scanner = $this->create_scanner_mock('application/x-msdownload', 'allow', 'text/plain;image/png');
-
-        $this->expectException(mimeblocker_exception::class);
-        $scanner->scan_file($this->tempfile, 'malware.exe');
+        $result = $scanner->scan_file($this->tempfile, 'malware.exe');
+        $this->assertEquals(scanner::SCAN_RESULT_FOUND, $result);
     }
 
     /**
@@ -120,9 +119,8 @@ final class scanner_test extends \advanced_testcase {
      */
     public function test_scan_file_deny_mode_blocked_type(): void {
         $scanner = $this->create_scanner_mock('application/x-msdownload', 'deny', 'application/x-msdownload');
-
-        $this->expectException(mimeblocker_exception::class);
-        $scanner->scan_file($this->tempfile, 'malware.exe');
+        $result = $scanner->scan_file($this->tempfile, 'malware.exe');
+        $this->assertEquals(scanner::SCAN_RESULT_FOUND, $result);
     }
 
     /**
@@ -154,5 +152,30 @@ final class scanner_test extends \advanced_testcase {
 
         $result = $scanner->scan_file($this->tempfile, 'readme.txt');
         $this->assertEquals(scanner::SCAN_RESULT_FOUND, $result);
+    }
+
+    /**
+     * When a blocked file is rejected, the temp file should still exist afterward
+     * so the antivirus manager can quarantine it, and get_virus_found_message()
+     * should return the structure the manager needs to display the error.
+     */
+    public function test_scan_file_blocked_does_not_delete_file(): void {
+        $scanner = $this->create_scanner_mock('application/x-msdownload', 'allow', 'text/plain;image/png');
+        $result = $scanner->scan_file($this->tempfile, 'malware.exe');
+
+        // The manager expects SCAN_RESULT_FOUND to trigger quarantine + cleanup.
+        $this->assertEquals(scanner::SCAN_RESULT_FOUND, $result);
+
+        // The file must still exist so the manager can quarantine it before deleting.
+        $this->assertFileExists($this->tempfile, 'Scanner should not delete the file — the antivirus manager handles cleanup');
+
+        // The manager calls get_virus_found_message() to build the user-facing exception.
+        $message = $scanner->get_virus_found_message();
+        $this->assertArrayHasKey('string', $message);
+        $this->assertArrayHasKey('component', $message);
+        $this->assertArrayHasKey('placeholders', $message);
+        $this->assertEquals('antivirus_mimeblocker', $message['component']);
+        $this->assertEquals('virusfoundallow', $message['string']);
+        $this->assertArrayHasKey('types', $message['placeholders']);
     }
 }

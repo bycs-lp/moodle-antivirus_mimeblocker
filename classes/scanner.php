@@ -38,9 +38,14 @@ defined('MOODLE_INTERNAL') || die();
 class scanner extends \core\antivirus\scanner {
 
     /**
-     * @var string A semicolon separated string of allowed or denyed mimetypes.
+     * @var array A semicolon separated string of allowed or denied mimetypes.
      */
     public $configuredmimetypes;
+
+    /**
+     * @var string The active scan mode ('allow' or 'deny'), set during scan_file().
+     */
+    private $scanmodeconfig = 'allow';
 
     /**
      * Class constructor.
@@ -111,11 +116,26 @@ class scanner extends \core\antivirus\scanner {
             return self::SCAN_RESULT_OK;
         }
 
-        // MIME type not allowed — delete file and throw exception.
-        unlink($file);
-        require_once('mimeblocker_exception.php');
-        $errorkey = ($scanmodeconfig === 'deny') ? 'virusfounddeny' : 'virusfoundallow';
-        throw new mimeblocker_exception($errorkey, '', ['types' => self::get_file_extensions()]);
+        // MIME type not allowed — let the antivirus manager handle quarantine, cleanup and messaging.
+        $this->scanmodeconfig = $scanmodeconfig;
+        return self::SCAN_RESULT_FOUND;
+    }
+
+    /**
+     * Return custom virus found message based on the active scan mode.
+     *
+     * Overrides the base method so the antivirus manager displays a message
+     * that tells the user which file types are allowed or denied.
+     *
+     * @return array array of string, component and placeholders for the exception.
+     */
+    public function get_virus_found_message() {
+        $stringkey = ($this->scanmodeconfig === 'deny') ? 'virusfounddeny' : 'virusfoundallow';
+        return [
+            'string' => $stringkey,
+            'component' => 'antivirus_mimeblocker',
+            'placeholders' => ['types' => $this->get_file_extensions()],
+        ];
     }
 
     /**
