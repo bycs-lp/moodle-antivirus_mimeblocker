@@ -124,7 +124,8 @@ class scanner extends \core\antivirus\scanner {
             }
         }
 
-        return $return;
+        // Unreachable in practice, but return a valid constant as a safeguard.
+        return self::SCAN_RESULT_ERROR;
     }
 
     /**
