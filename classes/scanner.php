@@ -81,13 +81,8 @@ class scanner extends \core\antivirus\scanner {
         }
 
         // Set scanmode.
-        $scanmodeconfig = self::get_config('scanmode');
-        $scanmode = [];
-        if ($scanmodeconfig == "allow") {
-            $scanmode = [true, false];
-        } else if ($scanmodeconfig == "deny") {
-            $scanmode = [false, true]; // Switch scanmode.
-        } else {
+        $scanmodeconfig = $this->get_config('scanmode');
+        if ($scanmodeconfig !== "allow" && $scanmodeconfig !== "deny") {
             // Invalid scanmode config, fail safe and block all uploads.
             return self::SCAN_RESULT_FOUND;
         }
@@ -108,24 +103,19 @@ class scanner extends \core\antivirus\scanner {
             $detectedmimetype = 'application/vnd.moodle.backup';
         }
 
-        // Check if result is in the array of allowed mimetypes.
-        $return = in_array($detectedmimetype, $this->configuredmimetypes);
-        if ($return == $scanmode[0]) {
+        // In deny mode, block if the type matches the list. In allow mode, block if it doesn't match.
+        $ismatch = in_array($detectedmimetype, $this->configuredmimetypes);
+        $isblocked = ($scanmodeconfig === 'deny') ? $ismatch : !$ismatch;
+
+        if (!$isblocked) {
             return self::SCAN_RESULT_OK;
-        } else if ($return == $scanmode[1]) {
-            // MIME type not allowed! custom exception will be throw and not return back at \core\antivirus\manager::scan_file.
-            unlink($file);
-            require_once('mimeblocker_exception.php');
-            if ($scanmodeconfig == "allow") {
-                throw new mimeblocker_exception('virusfoundallow', '', ['types' => self::get_file_extensions()]);
-            }
-            if ($scanmodeconfig == "deny") {
-                throw new mimeblocker_exception('virusfounddeny', '', ['types' => self::get_file_extensions()]);
-            }
         }
 
-        // Unreachable in practice, but return a valid constant as a safeguard.
-        return self::SCAN_RESULT_ERROR;
+        // MIME type not allowed — delete file and throw exception.
+        unlink($file);
+        require_once('mimeblocker_exception.php');
+        $errorkey = ($scanmodeconfig === 'deny') ? 'virusfounddeny' : 'virusfoundallow';
+        throw new mimeblocker_exception($errorkey, '', ['types' => self::get_file_extensions()]);
     }
 
     /**
