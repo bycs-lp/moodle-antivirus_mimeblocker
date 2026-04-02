@@ -147,9 +147,7 @@ class scanner extends \core\antivirus\scanner {
             }
         }
 
-        if (count($extensions)) {
-            return $extensions;
-        }
+        return $extensions;
     }
 
     /**
