@@ -24,8 +24,8 @@ namespace antivirus_mimeblocker;
  * @copyright  2026 MBS
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
+#[\PHPUnit\Framework\Attributes\CoversClass(\antivirus_mimeblocker\scanner::class)]
 final class scanner_test extends \advanced_testcase {
-
     /** @var string Temporary file used in testing. */
     protected $tempfile;
 
@@ -71,6 +71,34 @@ final class scanner_test extends \advanced_testcase {
 
         // Reinitialise the configured mimetypes from the mocked config via reflection,
         // since the property is protected.
+        $reflection = new \ReflectionProperty($antivirus, 'configuredmimetypes');
+        $reflection->setValue($antivirus, explode(';', trim($mimetypes)));
+
+        return $antivirus;
+    }
+
+    /**
+     * Helper: create a scanner with real MIME detection and only get_config stubbed.
+     *
+     * Unlike create_scanner_mock(), detect_mimetype() is NOT mocked, so finfo
+     * inspects the actual file content. Used to verify content-based detection
+     * end to end (e.g. a .txt file containing a shebang is not text/plain).
+     *
+     * @param string $scanmode 'allow' or 'deny'.
+     * @param string $mimetypes Semicolon-separated configured MIME types.
+     * @return scanner
+     */
+    private function create_scanner_real_detection(string $scanmode, string $mimetypes): scanner {
+        $antivirus = $this->getMockBuilder('\antivirus_mimeblocker\scanner')
+            ->onlyMethods(['get_config'])
+            ->getMock();
+
+        $configmap = [
+            ['scanmode', $scanmode],
+            ['mimetypes', $mimetypes],
+        ];
+        $antivirus->method('get_config')->will($this->returnValueMap($configmap));
+
         $reflection = new \ReflectionProperty($antivirus, 'configuredmimetypes');
         $reflection->setValue($antivirus, explode(';', trim($mimetypes)));
 
@@ -179,5 +207,89 @@ final class scanner_test extends \advanced_testcase {
         $this->assertEquals('antivirus_mimeblocker', $message['component']);
         $this->assertEquals('virusfoundallow', $message['string']);
         $this->assertArrayHasKey('types', $message['placeholders']);
+    }
+
+    /**
+     * Real detection: genuine plain text content in a .txt file passes in allow mode.
+     *
+     * This is the manual "Test 1" scenario: allow mode with
+     * text/plain;image/png;application/pdf and a plain text upload.
+     */
+    public function test_scan_file_real_detection_plain_text(): void {
+        $scanner = $this->create_scanner_real_detection('allow', 'text/plain;image/png;application/pdf');
+        file_put_contents($this->tempfile, "Hallo Welt\nls -la\ncd /tmp\n");
+
+        $result = $scanner->scan_file($this->tempfile, 'befehle.txt');
+        $this->assertEquals(scanner::SCAN_RESULT_OK, $result);
+    }
+
+    /**
+     * Real detection: a .txt file starting with a shebang is detected as
+     * text/x-shellscript by content, not text/plain, and therefore blocked
+     * in allow mode. Detection is content-based, the extension is irrelevant.
+     */
+    public function test_scan_file_real_detection_shebang_in_txt_blocked(): void {
+        $scanner = $this->create_scanner_real_detection('allow', 'text/plain;image/png;application/pdf');
+        file_put_contents($this->tempfile, "#!/bin/bash\necho hallo\n");
+
+        $result = $scanner->scan_file($this->tempfile, 'befehle.txt');
+        $this->assertEquals(scanner::SCAN_RESULT_FOUND, $result);
+    }
+
+    /**
+     * Real detection: an empty file is detected as application/x-empty
+     * and blocked in allow mode unless that type is configured.
+     */
+    public function test_scan_file_real_detection_empty_file_blocked(): void {
+        $scanner = $this->create_scanner_real_detection('allow', 'text/plain;image/png;application/pdf');
+        // Tempfile is created empty by setUp().
+
+        $result = $scanner->scan_file($this->tempfile, 'leer.txt');
+        $this->assertEquals(scanner::SCAN_RESULT_FOUND, $result);
+    }
+
+    /**
+     * Real detection: binary content (PNG magic bytes) is detected as image/png,
+     * passing in allow mode and blocked in deny mode.
+     */
+    public function test_scan_file_real_detection_png(): void {
+        // Minimal valid PNG header (signature + IHDR chunk).
+        $png = "\x89PNG\r\n\x1a\n" . pack('N', 13) . 'IHDR'
+            . pack('N', 1) . pack('N', 1) . "\x08\x02\x00\x00\x00" . pack('N', 0x907753de);
+        file_put_contents($this->tempfile, $png);
+
+        $scanner = $this->create_scanner_real_detection('allow', 'text/plain;image/png;application/pdf');
+        $this->assertEquals(scanner::SCAN_RESULT_OK, $scanner->scan_file($this->tempfile, 'bild.png'));
+
+        $scanner = $this->create_scanner_real_detection('deny', 'image/png');
+        $this->assertEquals(scanner::SCAN_RESULT_FOUND, $scanner->scan_file($this->tempfile, 'bild.png'));
+    }
+
+    /**
+     * MoodleNet compatibility: an empty file detected as inode/x-empty with a
+     * .log extension is treated as text/plain.
+     */
+    public function test_scan_file_empty_log_file_treated_as_text_plain(): void {
+        $logfile = $this->tempfile . '.log';
+        touch($logfile);
+
+        $scanner = $this->create_scanner_mock('inode/x-empty', 'allow', 'text/plain');
+        $result = $scanner->scan_file($logfile, 'backup.log');
+        $this->assertEquals(scanner::SCAN_RESULT_OK, $result);
+
+        unlink($logfile);
+    }
+
+    /**
+     * Gzip compatibility: gzip MIME types are treated as Moodle backup files.
+     */
+    public function test_scan_file_gzip_treated_as_moodle_backup(): void {
+        $scanner = $this->create_scanner_mock('application/x-gzip', 'allow', 'application/vnd.moodle.backup');
+        $result = $scanner->scan_file($this->tempfile, 'backup.mbz');
+        $this->assertEquals(scanner::SCAN_RESULT_OK, $result);
+
+        $scanner = $this->create_scanner_mock('application/gzip', 'allow', 'application/vnd.moodle.backup');
+        $result = $scanner->scan_file($this->tempfile, 'backup.mbz');
+        $this->assertEquals(scanner::SCAN_RESULT_OK, $result);
     }
 }

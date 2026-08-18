@@ -55,7 +55,7 @@ class scanner extends \core\antivirus\scanner {
     public function __construct() {
         parent::__construct();
         // Create array of allowed mimetypes based on config setting.
-        $this->configuredmimetypes = explode(";", trim($this->get_config('mimetypes')));
+        $this->configuredmimetypes = explode(";", trim((string) $this->get_config('mimetypes')));
     }
 
     /**
